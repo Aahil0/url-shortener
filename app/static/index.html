@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shortly: shorten a link, see who clicks it</title>
+<style>
+:root{--bg:#F3F5F7;--surface:#fff;--ink:#0F1B2D;--muted:#5A6B80;--line:#D6DDE5;--accent:#0B7A66;--on-accent:#fff;--danger:#B3261E}
+@media (prefers-color-scheme:dark){:root{--bg:#0E1620;--surface:#152130;--ink:#E8EEF5;--muted:#93A4B8;--line:#26364A;--accent:#3FCFB0;--on-accent:#06231C;--danger:#FF8A80}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:56px 20px 80px}
+h1{font-size:clamp(1.9rem,5vw,2.6rem);line-height:1.1;letter-spacing:-.02em;margin:0 0 8px;max-width:16em}
+.lede{color:var(--muted);margin:0 0 32px;max-width:34em}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+input,select,button{font:inherit;color:inherit}
+input,select{width:100%;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+input.big{font-size:1.15rem;padding:16px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 16px}
+@media (max-width:520px){.row{grid-template-columns:1fr}}
+button{cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--surface);padding:10px 14px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:600;padding:14px 22px}
+button.link{border:0;background:none;padding:0;color:var(--muted);text-decoration:underline}
+.msg{min-height:1.5em;margin:12px 0 0;color:var(--danger)}
+.result{display:none;margin-top:24px;padding:20px;border:1px solid var(--accent);border-radius:10px;background:var(--surface)}
+.result.show{display:block}
+.short{font:600 clamp(1.1rem,4vw,1.5rem) ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;word-break:break-all;color:var(--accent);text-decoration:none}
+.result .actions{margin-top:12px;display:flex;gap:12px;align-items:center}
+h2{font-size:1.1rem;margin:56px 0 12px}
+.empty{color:var(--muted)}
+.item{border-top:1px solid var(--line);padding:14px 0}
+.item:last-child{border-bottom:1px solid var(--line)}
+.head{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.head a{font:600 1rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink)}
+.clicks{white-space:nowrap;color:var(--muted)}
+.dest{color:var(--muted);font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:2px 0 6px}
+.detail{display:none;padding:12px 0 4px}
+.item.open .detail{display:block}
+.nums{display:flex;gap:32px;margin-bottom:12px}
+.nums b{display:block;font-size:1.6rem;line-height:1.1}
+.nums span,.axis{color:var(--muted);font-size:.85rem}
+svg.chart{width:100%;height:64px;display:block}
+.axis{display:flex;justify-content:space-between;margin-bottom:14px}
+.lists{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;font-size:.9rem}
+@media (max-width:520px){.lists{grid-template-columns:1fr}}
+.lists h3{font-size:.85rem;margin:0 0 4px;color:var(--muted);font-weight:600}
+.lists div{display:flex;justify-content:space-between;gap:8px}
+.foot{margin-top:10px}
+@media (prefers-reduced-motion:no-preference){.result.show{animation:pop .25s ease-out}@keyframes pop{from{transform:translateY(4px);opacity:0}}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Shorten a link, then see who clicks it.</h1>
+  <p class="lede">Paste a long link to get a short one. Every visit is counted by day, source, and device. We never store visitors' IP addresses.</p>
+
+  <form id="form" novalidate>
+    <label for="url">Long link</label>
+    <input id="url" class="big" type="text" inputmode="url" placeholder="https://example.com/a/very/long/path" autocomplete="off" required>
+    <div class="row">
+      <div><label for="alias">Custom ending (optional)</label><input id="alias" type="text" placeholder="my-launch" autocomplete="off"></div>
+      <div><label for="days">Expires</label>
+        <select id="days"><option value="">Never</option><option value="1">After 1 day</option><option value="7">After 7 days</option><option value="30">After 30 days</option></select></div>
+    </div>
+    <button class="primary" type="submit">Shorten link</button>
+    <p class="msg" id="error" role="alert"></p>
+  </form>
+
+  <section class="result" id="result" aria-live="polite">
+    <a class="short" id="shortUrl" target="_blank" rel="noopener"></a>
+    <div class="actions"><button id="copy" type="button">Copy link</button><span class="empty" id="expiry"></span></div>
+  </section>
+
+  <h2>Your links</h2>
+  <div id="list"></div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const KEY = "shortly.links";
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+const save = links => localStorage.setItem(KEY, JSON.stringify(links));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const d = body.detail;
+    throw Object.assign(new Error(Array.isArray(d) ? (d[0].msg || "").replace(/^Value error, /, "") : d || "Something went wrong"), { status: res.status });
+  }
+  return body;
+}
+
+$("#form").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("#error").textContent = "";
+  let url = $("#url").value.trim();
+  if (url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) url = "https://" + url;   // "example.com" -> https://example.com
+  const days = $("#days").value;
+  try {
+    const link = await api("/api/links", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, custom_alias: $("#alias").value.trim() || null, expires_in_days: days ? Number(days) : null }),
+    });
+    save([{ code: link.code, short_url: link.short_url }, ...load().filter(l => l.code !== link.code)]);
+    $("#shortUrl").textContent = link.short_url.replace(/^https?:\/\//, "");
+    $("#shortUrl").href = link.short_url;
+    $("#expiry").textContent = link.expires_at ? "Expires " + link.expires_at.slice(0, 10) : "";
+    $("#result").classList.add("show");
+    $("#form").reset();
+    render();
+  } catch (err) { $("#error").textContent = err.message; }
+});
+
+$("#copy").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("#shortUrl").href);
+  $("#copy").textContent = "Copied";
+  setTimeout(() => $("#copy").textContent = "Copy link", 1500);
+});
+
+function chart(days) {
+  const max = Math.max(1, ...days.map(d => d.count));
+  const bars = days.map((d, i) => {
+    const h = Math.max(1, Math.round(d.count / max * 60));
+    return `<rect x="${i * 10}" y="${62 - h}" width="8" height="${h}" rx="1" fill="${d.count ? "var(--accent)" : "var(--line)"}"><title>${d.date}: ${d.count} click${d.count === 1 ? "" : "s"}</title></rect>`;
+  }).join("");
+  return `<svg class="chart" viewBox="0 0 300 64" preserveAspectRatio="none" role="img" aria-label="Clicks per day, last 30 days">${bars}</svg>
+          <div class="axis"><span>${days[0].date}</span><span>${days[days.length - 1].date}</span></div>`;
+}
+const list = (title, rows) => `<div><h3>${title}</h3>${rows.length ? rows.map(r => `<div><span>${esc(r.name)}</span><span>${r.count}</span></div>`).join("") : '<span class="empty">No data yet</span>'}</div>`;
+
+async function render() {
+  const links = load(), box = $("#list");
+  if (!links.length) { box.innerHTML = '<p class="empty">Links you create appear here with their click stats.</p>'; return; }
+  box.innerHTML = links.map(l => `<div class="item" data-code="${esc(l.code)}">
+      <div class="head"><a href="${esc(l.short_url)}" target="_blank" rel="noopener">${esc(l.short_url.replace(/^https?:\/\//, ""))}</a><span class="clicks">…</span></div>
+      <div class="dest"></div>
+      <button class="link toggle" type="button" aria-expanded="false">Show stats</button>
+      <div class="detail"></div></div>`).join("");
+  for (const item of box.querySelectorAll(".item")) {
+    const code = item.dataset.code;
+    const toggle = item.querySelector(".toggle");
+    toggle.onclick = () => { const open = item.classList.toggle("open"); toggle.setAttribute("aria-expanded", open); toggle.textContent = open ? "Hide stats" : "Show stats"; };
+    try {
+      const s = await api(`/api/links/${encodeURIComponent(code)}/stats`);
+      item.querySelector(".clicks").textContent = `${s.total_clicks} click${s.total_clicks === 1 ? "" : "s"}`;
+      item.querySelector(".dest").textContent = s.original_url;
+      item.querySelector(".detail").innerHTML = `
+        <div class="nums"><div><b>${s.total_clicks}</b><span>clicks</span></div><div><b>${s.unique_visitors}</b><span>unique visitors</span></div></div>
+        ${chart(s.clicks_by_day)}
+        <div class="lists">${list("Sources", s.top_referrers)}${list("Devices", s.devices)}${list("Browsers", s.browsers)}</div>
+        <div class="foot"><button class="link remove" type="button">Remove from this list</button></div>`;
+    } catch (err) {
+      item.querySelector(".clicks").textContent = err.status === 404 ? "Link no longer exists" : "Stats unavailable";
+      item.querySelector(".detail").innerHTML = '<div class="foot"><button class="link remove" type="button">Remove from this list</button></div>';
+    }
+    item.querySelector(".remove").onclick = () => { save(load().filter(l => l.code !== code)); render(); };
+  }
+}
+render();
+</script>
+</body>
+</html>

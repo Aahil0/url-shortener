@@ -1,0 +1,16 @@
+services:
+  app:
+    build: .
+    ports:
+      - "${PORT:-80}:8000"
+    environment:
+      BASE_URL: ${BASE_URL:-}            # e.g. http://<your-ec2-public-ip>
+      VISITOR_SALT: ${VISITOR_SALT:-}    # random secret; generated at startup if empty
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-30}
+    volumes:
+      - shortener-data:/data             # survives container rebuilds
+    restart: unless-stopped
+
+volumes:
+  shortener-data:
