@@ -3,7 +3,7 @@
 A small full-stack app: a Python (FastAPI) REST API, a SQLite database, and a single-page frontend.
 Shorten a link, share it, and see clicks per day, top sources, devices, and unique visitors, without ever storing a visitor's IP address.
 
-**Live demo:** _add your EC2 URL here after deploying_ &nbsp;|&nbsp; **API docs:** `/docs` (interactive, auto-generated)
+**Live demo:** http://3.106.204.246/ &nbsp;|&nbsp; **API docs:** `/docs` (interactive, auto-generated)
 
 ## Features
 - Random 7-character base62 short codes, or your own custom alias
