@@ -86,6 +86,12 @@ tests/            19 tests: API behaviour, validation, expiry, analytics, rate l
 
 **In-memory rate limiting.** 30 link creations per IP per minute. It is per-process, resets on restart, and can't be shared between instances; for multiple servers I'd use Redis or an API gateway. `X-Forwarded-For` is only trusted when `TRUST_PROXY=true`, because clients can forge it.
 
+## Live Screenshots:
+<img width="946" height="902" alt="image" src="https://github.com/user-attachments/assets/35621877-78d2-457a-a0be-a65e3cdcb7b9" />
+<img width="886" height="572" alt="image" src="https://github.com/user-attachments/assets/460e1562-6aef-4132-a161-8e32e7347e70" />
+
+
+
 **No accounts.** Anyone who knows a code can view its stats, and the frontend remembers your links in `localStorage`. Random codes are unguessable, but custom aliases are not, so a real product needs ownership, authentication, and deletion. Codes and aliases are case-sensitive, which increases the code space but can confuse people who retype them.
 
 ## Possible next steps
